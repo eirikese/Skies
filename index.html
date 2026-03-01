@@ -1,0 +1,1438 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Skies">
+<meta name="theme-color" content="#0a0f1a">
+<title>Skies — Weather Atlas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root {
+    --bg: #070c18;
+    --surface: #0d1526;
+    --surface2: #121d35;
+    --border: rgba(100,160,255,0.12);
+    --accent: #4a9eff;
+    --accent2: #00e5c0;
+    --text: #ccd6f6;
+    --muted: #5a7090;
+    --danger: #ff6b6b;
+    --warn: #ffc548;
+    --dot-measured: #00e5c0;
+    --dot-forecast: #4a9eff;
+    --dot-mixed: #a78bfa;
+    --font-mono: 'Space Mono', monospace;
+    --font-display: 'Syne', sans-serif;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+- { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+height: 100%;
+background: var(–bg);
+color: var(–text);
+font-family: var(–font-mono);
+overflow: hidden;
+-webkit-tap-highlight-color: transparent;
+-webkit-font-smoothing: antialiased;
+}
+
+/* ─── LAYOUT ─── */
+#app {
+display: flex;
+flex-direction: column;
+height: 100%;
+padding-top: var(–safe-top);
+padding-bottom: var(–safe-bottom);
+}
+
+/* ─── HEADER ─── */
+#header {
+flex-shrink: 0;
+display: flex;
+align-items: center;
+justify-content: space-between;
+padding: 14px 20px 10px;
+border-bottom: 1px solid var(–border);
+background: linear-gradient(180deg, rgba(7,12,24,0.98) 0%, rgba(7,12,24,0.92) 100%);
+backdrop-filter: blur(20px);
+-webkit-backdrop-filter: blur(20px);
+z-index: 100;
+}
+
+.logo {
+font-family: var(–font-display);
+font-weight: 800;
+font-size: 22px;
+letter-spacing: -0.5px;
+background: linear-gradient(135deg, #fff 0%, var(–accent) 100%);
+-webkit-background-clip: text;
+-webkit-text-fill-color: transparent;
+}
+
+.header-actions {
+display: flex;
+gap: 10px;
+align-items: center;
+}
+
+.icon-btn {
+width: 38px; height: 38px;
+border-radius: 10px;
+border: 1px solid var(–border);
+background: var(–surface);
+color: var(–text);
+display: flex; align-items: center; justify-content: center;
+cursor: pointer;
+font-size: 16px;
+transition: all 0.2s;
+-webkit-tap-highlight-color: transparent;
+}
+.icon-btn:active { transform: scale(0.92); background: var(–surface2); }
+.icon-btn.active { border-color: var(–accent); color: var(–accent); }
+
+#sync-btn { position: relative; }
+.sync-spinner {
+display: none;
+width: 14px; height: 14px;
+border: 2px solid rgba(74,158,255,0.3);
+border-top-color: var(–accent);
+border-radius: 50%;
+animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.syncing .sync-spinner { display: block; }
+.syncing .sync-icon { display: none; }
+
+/* ─── TABS ─── */
+#tabs {
+flex-shrink: 0;
+display: flex;
+border-bottom: 1px solid var(–border);
+background: var(–bg);
+}
+
+.tab {
+flex: 1;
+padding: 10px 0;
+text-align: center;
+font-family: var(–font-display);
+font-weight: 600;
+font-size: 11px;
+letter-spacing: 1.5px;
+text-transform: uppercase;
+color: var(–muted);
+cursor: pointer;
+transition: color 0.2s;
+position: relative;
+}
+.tab.active { color: var(–accent); }
+.tab.active::after {
+content: ‘’;
+position: absolute;
+bottom: -1px; left: 20%; right: 20%;
+height: 2px;
+background: var(–accent);
+border-radius: 1px;
+}
+
+/* ─── MAIN CONTENT ─── */
+#content {
+flex: 1;
+overflow: hidden;
+position: relative;
+}
+
+.view { display: none; width: 100%; height: 100%; }
+.view.active { display: flex; flex-direction: column; }
+
+/* ─── MAP VIEW ─── */
+#map-view { position: relative; }
+
+#leaflet-map {
+flex: 1;
+z-index: 1;
+}
+
+.leaflet-container {
+background: #0d1a2e;
+font-family: var(–font-mono);
+}
+
+/* Dark tile filter */
+.leaflet-tile-pane { filter: invert(1) hue-rotate(200deg) saturate(0.4) brightness(0.7); }
+
+.map-controls {
+position: absolute;
+bottom: 20px;
+left: 50%;
+transform: translateX(-50%);
+z-index: 10;
+display: flex;
+gap: 10px;
+}
+
+.map-ctrl-btn {
+padding: 10px 20px;
+border-radius: 24px;
+border: 1px solid var(–border);
+background: rgba(13,21,38,0.92);
+backdrop-filter: blur(20px);
+-webkit-backdrop-filter: blur(20px);
+color: var(–text);
+font-family: var(–font-display);
+font-weight: 600;
+font-size: 13px;
+cursor: pointer;
+transition: all 0.2s;
+}
+.map-ctrl-btn:active { transform: scale(0.95); }
+.map-ctrl-btn.placing { border-color: var(–accent2); color: var(–accent2); }
+
+/* Custom marker */
+.weather-marker {
+background: var(–surface);
+border: 2px solid var(–accent);
+border-radius: 50% 50% 50% 0;
+transform: rotate(-45deg);
+width: 28px; height: 28px;
+display: flex; align-items: center; justify-content: center;
+box-shadow: 0 0 12px rgba(74,158,255,0.4);
+cursor: pointer;
+}
+.weather-marker-inner {
+transform: rotate(45deg);
+font-size: 14px;
+line-height: 1;
+}
+
+/* ─── LOCATIONS LIST ─── */
+#locations-view {
+overflow-y: auto;
+-webkit-overflow-scrolling: touch;
+padding: 16px;
+gap: 12px;
+display: flex;
+flex-direction: column;
+}
+
+.location-card {
+background: var(–surface);
+border: 1px solid var(–border);
+border-radius: 16px;
+padding: 16px;
+cursor: pointer;
+transition: all 0.2s;
+position: relative;
+overflow: hidden;
+}
+.location-card::before {
+content: ‘’;
+position: absolute;
+inset: 0;
+background: linear-gradient(135deg, rgba(74,158,255,0.03) 0%, transparent 60%);
+pointer-events: none;
+}
+.location-card:active { transform: scale(0.98); border-color: rgba(74,158,255,0.3); }
+
+.loc-header {
+display: flex;
+justify-content: space-between;
+align-items: flex-start;
+margin-bottom: 12px;
+}
+
+.loc-name {
+font-family: var(–font-display);
+font-weight: 700;
+font-size: 17px;
+color: #fff;
+}
+
+.loc-coords {
+font-size: 10px;
+color: var(–muted);
+margin-top: 2px;
+}
+
+.loc-actions {
+display: flex;
+gap: 8px;
+}
+
+.loc-action-btn {
+width: 30px; height: 30px;
+border-radius: 8px;
+border: 1px solid var(–border);
+background: var(–surface2);
+color: var(–muted);
+display: flex; align-items: center; justify-content: center;
+cursor: pointer;
+font-size: 13px;
+transition: all 0.15s;
+}
+.loc-action-btn:active { color: var(–danger); border-color: var(–danger); }
+
+.loc-current-weather {
+display: flex;
+gap: 16px;
+flex-wrap: wrap;
+}
+
+.weather-stat {
+display: flex;
+flex-direction: column;
+gap: 2px;
+}
+
+.stat-label {
+font-size: 10px;
+letter-spacing: 1px;
+text-transform: uppercase;
+color: var(–muted);
+}
+
+.stat-value {
+font-size: 18px;
+font-weight: 700;
+color: #fff;
+display: flex;
+align-items: center;
+gap: 5px;
+}
+
+.data-dot {
+width: 7px; height: 7px;
+border-radius: 50%;
+flex-shrink: 0;
+}
+.data-dot.measured { background: var(–dot-measured); box-shadow: 0 0 6px var(–dot-measured); }
+.data-dot.forecast { background: var(–dot-forecast); box-shadow: 0 0 6px var(–dot-forecast); }
+.data-dot.mixed { background: var(–dot-mixed); box-shadow: 0 0 6px var(–dot-mixed); }
+
+.loc-last-update {
+margin-top: 10px;
+font-size: 10px;
+color: var(–muted);
+display: flex;
+align-items: center;
+gap: 6px;
+}
+
+.no-locations {
+flex: 1;
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+gap: 12px;
+color: var(–muted);
+text-align: center;
+padding: 40px;
+}
+.no-locations-icon { font-size: 48px; opacity: 0.4; }
+.no-locations-title { font-family: var(–font-display); font-size: 18px; color: var(–text); }
+.no-locations p { font-size: 12px; line-height: 1.8; }
+
+/* ─── DETAIL VIEW ─── */
+#detail-view {
+display: none;
+position: absolute;
+inset: 0;
+background: var(–bg);
+z-index: 200;
+flex-direction: column;
+overflow: hidden;
+animation: slideUp 0.3s cubic-bezier(0.34,1.56,0.64,1);
+}
+#detail-view.open { display: flex; }
+@keyframes slideUp {
+from { transform: translateY(100%); opacity: 0; }
+to { transform: translateY(0); opacity: 1; }
+}
+
+.detail-header {
+display: flex;
+align-items: center;
+gap: 12px;
+padding: 16px 20px;
+border-bottom: 1px solid var(–border);
+flex-shrink: 0;
+}
+
+.back-btn {
+width: 36px; height: 36px;
+border-radius: 10px;
+border: 1px solid var(–border);
+background: var(–surface);
+color: var(–text);
+display: flex; align-items: center; justify-content: center;
+cursor: pointer;
+font-size: 18px;
+flex-shrink: 0;
+}
+
+.detail-title {
+font-family: var(–font-display);
+font-weight: 800;
+font-size: 20px;
+flex: 1;
+min-width: 0;
+overflow: hidden;
+text-overflow: ellipsis;
+white-space: nowrap;
+}
+
+.view-toggle {
+display: flex;
+border: 1px solid var(–border);
+border-radius: 10px;
+overflow: hidden;
+flex-shrink: 0;
+}
+
+.vt-btn {
+padding: 7px 14px;
+font-family: var(–font-display);
+font-weight: 600;
+font-size: 11px;
+letter-spacing: 0.5px;
+color: var(–muted);
+cursor: pointer;
+transition: all 0.2s;
+background: transparent;
+border: none;
+}
+.vt-btn.active { background: var(–accent); color: #fff; }
+
+.detail-content {
+flex: 1;
+overflow-y: auto;
+-webkit-overflow-scrolling: touch;
+padding: 16px;
+}
+
+/* Legend */
+.legend {
+display: flex;
+gap: 16px;
+padding: 10px 16px;
+border-bottom: 1px solid var(–border);
+flex-shrink: 0;
+background: var(–surface);
+}
+.legend-item {
+display: flex;
+align-items: center;
+gap: 5px;
+font-size: 10px;
+color: var(–muted);
+}
+
+/* Chart */
+.chart-section {
+background: var(–surface);
+border: 1px solid var(–border);
+border-radius: 16px;
+padding: 16px;
+margin-bottom: 14px;
+}
+
+.chart-title {
+font-family: var(–font-display);
+font-weight: 600;
+font-size: 13px;
+color: var(–muted);
+letter-spacing: 1px;
+text-transform: uppercase;
+margin-bottom: 12px;
+}
+
+.chart-wrapper {
+overflow-x: auto;
+-webkit-overflow-scrolling: touch;
+}
+
+canvas.weather-chart {
+display: block;
+height: 120px;
+}
+
+/* Data rows for daily/weekly */
+.data-row {
+display: flex;
+align-items: center;
+padding: 10px 0;
+border-bottom: 1px solid var(–border);
+gap: 10px;
+}
+.data-row:last-child { border-bottom: none; }
+
+.data-row-time {
+font-size: 11px;
+color: var(–muted);
+width: 90px;
+flex-shrink: 0;
+font-family: var(–font-mono);
+}
+
+.data-row-icon { font-size: 20px; width: 30px; text-align: center; flex-shrink: 0; }
+
+.data-row-values {
+flex: 1;
+display: grid;
+grid-template-columns: repeat(3, 1fr);
+gap: 4px;
+}
+
+.mini-stat { display: flex; flex-direction: column; }
+.mini-stat .label { font-size: 9px; color: var(–muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.mini-stat .value { font-size: 13px; color: var(–text); font-weight: 700; }
+
+.data-row-dot { flex-shrink: 0; }
+
+/* ─── TOAST ─── */
+#toast {
+position: fixed;
+bottom: calc(80px + var(–safe-bottom));
+left: 50%;
+transform: translateX(-50%) translateY(20px);
+background: var(–surface2);
+border: 1px solid var(–border);
+color: var(–text);
+font-size: 12px;
+padding: 10px 18px;
+border-radius: 24px;
+opacity: 0;
+transition: all 0.3s;
+z-index: 999;
+white-space: nowrap;
+pointer-events: none;
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ─── MODAL ─── */
+.modal-overlay {
+display: none;
+position: fixed;
+inset: 0;
+background: rgba(0,0,0,0.7);
+z-index: 500;
+align-items: flex-end;
+justify-content: center;
+backdrop-filter: blur(4px);
+}
+.modal-overlay.open { display: flex; }
+
+.modal {
+background: var(–surface);
+border: 1px solid var(–border);
+border-radius: 20px 20px 0 0;
+padding: 24px 20px calc(24px + var(–safe-bottom));
+width: 100%;
+max-width: 500px;
+animation: modalSlide 0.3s ease;
+}
+@keyframes modalSlide {
+from { transform: translateY(100%); }
+to { transform: translateY(0); }
+}
+
+.modal-title {
+font-family: var(–font-display);
+font-size: 18px;
+font-weight: 800;
+margin-bottom: 16px;
+color: #fff;
+}
+
+.modal input {
+width: 100%;
+background: var(–surface2);
+border: 1px solid var(–border);
+border-radius: 12px;
+padding: 12px 14px;
+color: var(–text);
+font-family: var(–font-mono);
+font-size: 14px;
+outline: none;
+transition: border-color 0.2s;
+margin-bottom: 12px;
+}
+.modal input:focus { border-color: var(–accent); }
+
+.modal-coords {
+font-size: 11px;
+color: var(–muted);
+margin-bottom: 16px;
+font-family: var(–font-mono);
+}
+
+.modal-actions {
+display: flex;
+gap: 10px;
+}
+
+.btn {
+flex: 1;
+padding: 13px;
+border-radius: 12px;
+font-family: var(–font-display);
+font-weight: 700;
+font-size: 14px;
+cursor: pointer;
+border: 1px solid var(–border);
+transition: all 0.2s;
+}
+.btn:active { transform: scale(0.97); }
+.btn-primary { background: var(–accent); color: #fff; border-color: var(–accent); }
+.btn-secondary { background: transparent; color: var(–muted); }
+
+/* ─── EMPTY STATE ─── */
+.detail-empty {
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+padding: 60px 20px;
+text-align: center;
+gap: 10px;
+color: var(–muted);
+}
+.detail-empty-icon { font-size: 40px; opacity: 0.4; }
+.detail-empty-title { font-family: var(–font-display); font-size: 16px; color: var(–text); }
+
+/* ─── SCROLLBAR ─── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(–border); border-radius: 2px; }
+
+/* Leaflet popup override */
+.leaflet-popup-content-wrapper {
+background: var(–surface) !important;
+border: 1px solid var(–border) !important;
+border-radius: 12px !important;
+box-shadow: 0 8px 32px rgba(0,0,0,0.5) !important;
+color: var(–text) !important;
+font-family: var(–font-mono) !important;
+}
+.leaflet-popup-tip { background: var(–surface) !important; }
+.leaflet-popup-content { margin: 12px 14px !important; font-size: 12px !important; }
+.popup-name { font-family: var(–font-display); font-weight: 700; font-size: 14px; color: #fff; margin-bottom: 6px; }
+.popup-temp { font-size: 18px; font-weight: 700; }
+</style>
+
+</head>
+<body>
+<div id="app">
+  <!-- HEADER -->
+  <div id="header">
+    <div class="logo">SKIES</div>
+    <div class="header-actions">
+      <div class="icon-btn" id="sync-btn" onclick="syncAll()" title="Refresh weather data">
+        <span class="sync-icon">↻</span>
+        <div class="sync-spinner"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TABS -->
+
+  <div id="tabs">
+    <div class="tab active" data-view="map-view" onclick="switchTab(this)">Map</div>
+    <div class="tab" data-view="locations-view" onclick="switchTab(this)">Locations</div>
+  </div>
+
+  <!-- CONTENT -->
+
+  <div id="content">
+
+```
+<!-- MAP VIEW -->
+<div class="view active" id="map-view">
+  <div id="leaflet-map"></div>
+  <div class="map-controls">
+    <button class="map-ctrl-btn" id="add-pin-btn" onclick="togglePinMode()">＋ Add Location</button>
+  </div>
+</div>
+
+<!-- LOCATIONS VIEW -->
+<div class="view" id="locations-view">
+  <div id="locations-list"></div>
+</div>
+
+<!-- DETAIL VIEW (overlay) -->
+<div id="detail-view">
+  <div class="detail-header">
+    <div class="back-btn" onclick="closeDetail()">←</div>
+    <div class="detail-title" id="detail-title">—</div>
+    <div class="view-toggle">
+      <button class="vt-btn active" onclick="setDetailView('hourly', this)">24H</button>
+      <button class="vt-btn" onclick="setDetailView('daily', this)">7D</button>
+      <button class="vt-btn" onclick="setDetailView('weekly', this)">4W</button>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="legend-item"><div class="data-dot measured"></div> Measured</div>
+    <div class="legend-item"><div class="data-dot forecast"></div> Forecast</div>
+    <div class="legend-item"><div class="data-dot mixed"></div> Mixed</div>
+  </div>
+  <div class="detail-content" id="detail-content"></div>
+</div>
+```
+
+  </div>
+</div>
+
+<!-- MODAL: Name location -->
+
+<div class="modal-overlay" id="name-modal">
+  <div class="modal">
+    <div class="modal-title">Name this location</div>
+    <div class="modal-coords" id="modal-coords-display"></div>
+    <input type="text" id="location-name-input" placeholder="e.g. Summer Cabin, Beach Spot…" maxlength="30" autocomplete="off">
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmAddLocation()">Save & Fetch</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+
+<div id="toast"></div>
+
+<script>
+// ════════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════════
+const CACHE_KEY = 'skies_v4';
+let state = {
+  locations: [],       // { id, name, lat, lng, cache: [...snapshots] }
+  placingPin: false,
+  pendingCoords: null,
+};
+let map, markers = {}, detailLocationId = null, detailViewMode = 'hourly';
+
+// ════════════════════════════════════════════════
+//  PERSISTENCE
+// ════════════════════════════════════════════════
+function saveState() {
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify(state.locations)); } catch(e) {}
+}
+function loadState() {
+  try {
+    const d = localStorage.getItem(CACHE_KEY);
+    if (d) state.locations = JSON.parse(d);
+  } catch(e) { state.locations = []; }
+}
+
+// ════════════════════════════════════════════════
+//  INIT
+// ════════════════════════════════════════════════
+window.addEventListener('load', () => {
+  loadState();
+  initMap();
+  renderLocations();
+  syncAll(true);
+});
+
+// ════════════════════════════════════════════════
+//  MAP
+// ════════════════════════════════════════════════
+function initMap() {
+  map = L.map('leaflet-map', {
+    center: state.locations.length ? [state.locations[0].lat, state.locations[0].lng] : [51.5, 0],
+    zoom: state.locations.length ? 8 : 4,
+    zoomControl: false,
+    attributionControl: false
+  });
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 18,
+  }).addTo(map);
+
+  L.control.zoom({ position: 'topright' }).addTo(map);
+  L.control.attribution({ position: 'bottomleft', prefix: '' }).addTo(map);
+
+  map.on('click', (e) => {
+    if (state.placingPin) {
+      state.pendingCoords = { lat: e.latlng.lat, lng: e.latlng.lng };
+      document.getElementById('modal-coords-display').textContent =
+        `${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)}`;
+      document.getElementById('location-name-input').value = '';
+      openModal();
+    }
+  });
+
+  // Re-render existing markers
+  state.locations.forEach(addMarker);
+}
+
+function addMarker(loc) {
+  const icon = L.divIcon({
+    className: '',
+    html: `<div class="weather-marker"><div class="weather-marker-inner">${getWeatherEmoji(loc)}</div></div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 28],
+    popupAnchor: [0, -30]
+  });
+
+  const marker = L.marker([loc.lat, loc.lng], { icon }).addTo(map);
+  const temp = getLatestTemp(loc);
+  marker.bindPopup(`<div class="popup-name">${loc.name}</div>
+    <div class="popup-temp">${temp !== null ? temp + '°C' : '—'}</div>
+    <div style="font-size:10px;color:#5a7090;margin-top:4px;">${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)}</div>`);
+
+  marker.on('click', () => {
+    openDetail(loc.id);
+  });
+
+  markers[loc.id] = marker;
+}
+
+function updateMarkerIcon(loc) {
+  if (!markers[loc.id]) return;
+  const icon = L.divIcon({
+    className: '',
+    html: `<div class="weather-marker"><div class="weather-marker-inner">${getWeatherEmoji(loc)}</div></div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 28],
+    popupAnchor: [0, -30]
+  });
+  markers[loc.id].setIcon(icon);
+  const temp = getLatestTemp(loc);
+  markers[loc.id].setPopupContent(`<div class="popup-name">${loc.name}</div>
+    <div class="popup-temp">${temp !== null ? temp + '°C' : '—'}</div>
+    <div style="font-size:10px;color:#5a7090;margin-top:4px;">${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)}</div>`);
+}
+
+// ════════════════════════════════════════════════
+//  PIN MODE
+// ════════════════════════════════════════════════
+function togglePinMode() {
+  state.placingPin = !state.placingPin;
+  const btn = document.getElementById('add-pin-btn');
+  if (state.placingPin) {
+    btn.classList.add('placing');
+    btn.textContent = '× Cancel';
+    map.getContainer().style.cursor = 'crosshair';
+    showToast('Tap on map to place location');
+  } else {
+    btn.classList.remove('placing');
+    btn.textContent = '＋ Add Location';
+    map.getContainer().style.cursor = '';
+  }
+}
+
+// ════════════════════════════════════════════════
+//  MODAL
+// ════════════════════════════════════════════════
+function openModal() {
+  document.getElementById('name-modal').classList.add('open');
+  setTimeout(() => document.getElementById('location-name-input').focus(), 300);
+}
+function closeModal() {
+  document.getElementById('name-modal').classList.remove('open');
+  state.pendingCoords = null;
+  if (state.placingPin) togglePinMode();
+}
+
+document.getElementById('location-name-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') confirmAddLocation();
+});
+
+function confirmAddLocation() {
+  const name = document.getElementById('location-name-input').value.trim();
+  if (!name) { showToast('Please enter a name'); return; }
+  if (!state.pendingCoords) return;
+
+  const loc = {
+    id: Date.now().toString(),
+    name,
+    lat: state.pendingCoords.lat,
+    lng: state.pendingCoords.lng,
+    cache: []
+  };
+
+  state.locations.push(loc);
+  saveState();
+  closeModal();
+  if (state.placingPin) togglePinMode();
+  addMarker(loc);
+  renderLocations();
+  showToast(`Fetching weather for ${name}…`);
+  fetchWeather(loc).then(() => { renderLocations(); updateMarkerIcon(loc); });
+  switchTab(document.querySelector('[data-view="locations-view"]'));
+}
+
+// ════════════════════════════════════════════════
+//  TABS
+// ════════════════════════════════════════════════
+function switchTab(el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById(el.dataset.view).classList.add('active');
+  if (el.dataset.view === 'map-view') setTimeout(() => map.invalidateSize(), 100);
+}
+
+// ════════════════════════════════════════════════
+//  YR.NO API (Met.no Locationforecast 2.0)
+// ════════════════════════════════════════════════
+async function fetchWeather(loc) {
+  const url = `https://api.met.no/weatherapi/locationforecast/2.0/complete?lat=${loc.lat.toFixed(4)}&lon=${loc.lng.toFixed(4)}`;
+
+  try {
+    const resp = await fetch(url, {
+      headers: { 'User-Agent': 'Skies-WeatherApp/1.0 github.com/user/skies' }
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    processWeatherData(loc, data);
+    saveState();
+    return true;
+  } catch(e) {
+    console.error('Fetch failed for', loc.name, e);
+    showToast(`Failed to fetch ${loc.name}`);
+    return false;
+  }
+}
+
+function processWeatherData(loc, data) {
+  const now = Date.now();
+  const timeseries = data.properties?.timeseries || [];
+  const currentTime = new Date();
+
+  const snapshot = {
+    fetchedAt: now,
+    timeseries: timeseries.slice(0, 200).map(ts => {
+      const time = new Date(ts.time);
+      const isNow = Math.abs(time - currentTime) < 3.5 * 3600 * 1000; // within 3.5h = "current"
+      const instant = ts.data?.instant?.details || {};
+      const next1 = ts.data?.next_1_hours;
+      const next6 = ts.data?.next_6_hours;
+      const next12 = ts.data?.next_12_hours;
+      const symbol = (next1 || next6 || next12)?.summary?.symbol_code || 'unknown';
+      const precip = (next1 || next6 || next12)?.details?.precipitation_amount || 0;
+
+      return {
+        time: ts.time,
+        type: isNow ? 'measured' : 'forecast',
+        temp: instant.air_temperature,
+        wind: instant.wind_speed,
+        windDir: instant.wind_from_direction,
+        humidity: instant.relative_humidity,
+        pressure: instant.air_pressure_at_sea_level,
+        clouds: instant.cloud_area_fraction,
+        symbol,
+        precip,
+      };
+    })
+  };
+
+  // Keep up to 30 snapshots
+  loc.cache = loc.cache || [];
+  loc.cache.push(snapshot);
+  if (loc.cache.length > 30) loc.cache = loc.cache.slice(-30);
+}
+
+// ════════════════════════════════════════════════
+//  SYNC ALL
+// ════════════════════════════════════════════════
+async function syncAll(silent = false) {
+  if (!state.locations.length) return;
+  const btn = document.getElementById('sync-btn');
+  btn.classList.add('syncing');
+  if (!silent) showToast('Syncing all locations…');
+
+  const tasks = state.locations.map(loc => fetchWeather(loc));
+  await Promise.all(tasks);
+
+  btn.classList.remove('syncing');
+  renderLocations();
+  state.locations.forEach(updateMarkerIcon);
+  if (!silent) showToast('All locations updated');
+}
+
+// ════════════════════════════════════════════════
+//  HELPERS
+// ════════════════════════════════════════════════
+function getLatestSnapshot(loc) {
+  if (!loc.cache.length) return null;
+  return loc.cache[loc.cache.length - 1];
+}
+
+function getLatestTemp(loc) {
+  const snap = getLatestSnapshot(loc);
+  if (!snap || !snap.timeseries.length) return null;
+  return snap.timeseries[0].temp !== undefined ? Math.round(snap.timeseries[0].temp) : null;
+}
+
+function getLatestEntry(loc) {
+  const snap = getLatestSnapshot(loc);
+  if (!snap || !snap.timeseries.length) return null;
+  return snap.timeseries[0];
+}
+
+function getWeatherEmoji(loc) {
+  const e = getLatestEntry(loc);
+  if (!e) return '📍';
+  return symbolToEmoji(e.symbol);
+}
+
+function symbolToEmoji(symbol) {
+  if (!symbol) return '🌡';
+  if (symbol.includes('clearsky')) return '☀️';
+  if (symbol.includes('fair')) return '🌤';
+  if (symbol.includes('partlycloudy')) return '⛅';
+  if (symbol.includes('cloudy')) return '☁️';
+  if (symbol.includes('fog')) return '🌫';
+  if (symbol.includes('thunder')) return '⛈';
+  if (symbol.includes('snow') || symbol.includes('sleet')) return '❄️';
+  if (symbol.includes('rain') || symbol.includes('shower')) return '🌧';
+  return '🌡';
+}
+
+function windDir(deg) {
+  const dirs = ['N','NE','E','SE','S','SW','W','NW'];
+  return dirs[Math.round(deg/45) % 8];
+}
+
+function formatTime(isoStr) {
+  const d = new Date(isoStr);
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatDay(isoStr) {
+  const d = new Date(isoStr);
+  return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+function timeSince(ts) {
+  const mins = Math.floor((Date.now() - ts) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins/60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs/24)}d ago`;
+}
+
+// ════════════════════════════════════════════════
+//  RENDER LOCATIONS LIST
+// ════════════════════════════════════════════════
+function renderLocations() {
+  const container = document.getElementById('locations-list');
+
+  if (!state.locations.length) {
+    container.innerHTML = `
+      <div class="no-locations">
+        <div class="no-locations-icon">🗺</div>
+        <div class="no-locations-title">No locations yet</div>
+        <p>Switch to the Map tab and tap<br>"+ Add Location" to drop a pin<br>anywhere in the world.</p>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = state.locations.map(loc => {
+    const snap = getLatestSnapshot(loc);
+    const entry = snap?.timeseries?.[0];
+    const temp = entry?.temp !== undefined ? Math.round(entry.temp) : null;
+    const wind = entry?.wind !== undefined ? entry.wind.toFixed(1) : null;
+    const humid = entry?.humidity !== undefined ? Math.round(entry.humidity) : null;
+    const precip = entry?.precip !== undefined ? entry.precip.toFixed(1) : null;
+    const dataType = entry?.type || 'forecast';
+    const emoji = symbolToEmoji(entry?.symbol);
+
+    return `
+    <div class="location-card" onclick="openDetail('${loc.id}')">
+      <div class="loc-header">
+        <div>
+          <div class="loc-name">${emoji} ${loc.name}</div>
+          <div class="loc-coords">${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)}</div>
+        </div>
+        <div class="loc-actions" onclick="event.stopPropagation()">
+          <div class="loc-action-btn" onclick="deleteLocation('${loc.id}')">🗑</div>
+        </div>
+      </div>
+      ${snap ? `
+      <div class="loc-current-weather">
+        ${temp !== null ? `<div class="weather-stat">
+          <div class="stat-label">Temp</div>
+          <div class="stat-value"><div class="data-dot ${dataType}"></div>${temp}°C</div>
+        </div>` : ''}
+        ${wind !== null ? `<div class="weather-stat">
+          <div class="stat-label">Wind</div>
+          <div class="stat-value">${wind} m/s</div>
+        </div>` : ''}
+        ${humid !== null ? `<div class="weather-stat">
+          <div class="stat-label">Humidity</div>
+          <div class="stat-value">${humid}%</div>
+        </div>` : ''}
+        ${precip !== null ? `<div class="weather-stat">
+          <div class="stat-label">Precip</div>
+          <div class="stat-value">${precip} mm</div>
+        </div>` : ''}
+      </div>
+      <div class="loc-last-update">
+        <div class="data-dot ${dataType}"></div>
+        Updated ${timeSince(snap.fetchedAt)} · ${dataType}
+      </div>` : `<div class="loc-last-update">No data yet — tap to fetch</div>`}
+    </div>`;
+  }).join('');
+}
+
+// ════════════════════════════════════════════════
+//  DELETE LOCATION
+// ════════════════════════════════════════════════
+function deleteLocation(id) {
+  if (!confirm('Remove this location?')) return;
+  const loc = state.locations.find(l => l.id === id);
+  if (markers[id]) { markers[id].remove(); delete markers[id]; }
+  state.locations = state.locations.filter(l => l.id !== id);
+  saveState();
+  renderLocations();
+  showToast(`Removed ${loc?.name || 'location'}`);
+}
+
+// ════════════════════════════════════════════════
+//  DETAIL VIEW
+// ════════════════════════════════════════════════
+function openDetail(locId) {
+  detailLocationId = locId;
+  detailViewMode = 'hourly';
+  document.querySelectorAll('.vt-btn').forEach((b, i) => b.classList.toggle('active', i === 0));
+  renderDetail();
+  document.getElementById('detail-view').classList.add('open');
+}
+
+function closeDetail() {
+  document.getElementById('detail-view').classList.remove('open');
+  detailLocationId = null;
+}
+
+function setDetailView(mode, btn) {
+  detailViewMode = mode;
+  document.querySelectorAll('.vt-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderDetail();
+}
+
+function renderDetail() {
+  const loc = state.locations.find(l => l.id === detailLocationId);
+  if (!loc) return;
+  document.getElementById('detail-title').textContent = loc.name;
+  const container = document.getElementById('detail-content');
+
+  const snap = getLatestSnapshot(loc);
+  if (!snap) {
+    container.innerHTML = `<div class="detail-empty">
+      <div class="detail-empty-icon">🌐</div>
+      <div class="detail-empty-title">No data available</div>
+      <p style="font-size:12px;color:var(--muted);">Pull data using the sync button above.</p>
+    </div>`;
+    return;
+  }
+
+  if (detailViewMode === 'hourly') renderHourly(loc, snap, container);
+  else if (detailViewMode === 'daily') renderDaily(loc, snap, container);
+  else renderWeekly(loc, container);
+}
+
+function renderHourly(loc, snap, container) {
+  // Next 24 hours (hourly)
+  const entries = snap.timeseries.filter((_, i) => i < 25);
+  if (!entries.length) { container.innerHTML = '<div class="detail-empty"><div class="detail-empty-icon">📭</div><div>No hourly data</div></div>'; return; }
+
+  const temps = entries.map(e => e.temp);
+  const minT = Math.min(...temps.filter(t => t !== undefined));
+  const maxT = Math.max(...temps.filter(t => t !== undefined));
+
+  container.innerHTML = `
+    <div class="chart-section">
+      <div class="chart-title">Temperature (°C)</div>
+      <div class="chart-wrapper">
+        ${renderMiniChart(entries, 'temp', minT, maxT)}
+      </div>
+    </div>
+    <div class="chart-section">
+      <div class="chart-title">Wind Speed (m/s)</div>
+      <div class="chart-wrapper">
+        ${renderMiniChart(entries, 'wind', 0, Math.max(...entries.map(e => e.wind||0)) + 2)}
+      </div>
+    </div>
+    <div class="chart-section">
+      <div class="chart-title">Precipitation (mm/h)</div>
+      <div class="chart-wrapper">
+        ${renderBarChart(entries)}
+      </div>
+    </div>
+    <div class="chart-section">
+      <div class="chart-title">Hourly Breakdown</div>
+      ${entries.map(e => `
+        <div class="data-row">
+          <div class="data-row-time">${formatTime(e.time)}</div>
+          <div class="data-row-icon">${symbolToEmoji(e.symbol)}</div>
+          <div class="data-row-values">
+            <div class="mini-stat"><div class="label">Temp</div><div class="value">${e.temp !== undefined ? Math.round(e.temp)+'°C' : '—'}</div></div>
+            <div class="mini-stat"><div class="label">Wind</div><div class="value">${e.wind !== undefined ? e.wind.toFixed(1)+' m/s' : '—'}</div></div>
+            <div class="mini-stat"><div class="label">Rain</div><div class="value">${e.precip !== undefined ? e.precip.toFixed(1)+'mm' : '—'}</div></div>
+          </div>
+          <div class="data-row-dot"><div class="data-dot ${e.type}"></div></div>
+        </div>`).join('')}
+    </div>`;
+}
+
+function renderDaily(loc, snap, container) {
+  // Group by day
+  const days = {};
+  snap.timeseries.forEach(e => {
+    const day = e.time.slice(0,10);
+    if (!days[day]) days[day] = [];
+    days[day].push(e);
+  });
+
+  const dayKeys = Object.keys(days).slice(0, 7);
+  if (!dayKeys.length) { container.innerHTML = '<div class="detail-empty"><div class="detail-empty-icon">📭</div><div>No daily data</div></div>'; return; }
+
+  const dayEntries = dayKeys.map(day => {
+    const entries = days[day];
+    const temps = entries.map(e => e.temp).filter(t => t !== undefined);
+    const winds = entries.map(e => e.wind).filter(w => w !== undefined);
+    const precips = entries.map(e => e.precip).filter(p => p !== undefined);
+    const types = [...new Set(entries.map(e => e.type))];
+    const dataType = types.length > 1 ? 'mixed' : (types[0] || 'forecast');
+    return {
+      day,
+      minT: Math.min(...temps),
+      maxT: Math.max(...temps),
+      avgWind: winds.length ? winds.reduce((a,b) => a+b, 0)/winds.length : null,
+      totalPrecip: precips.reduce((a,b) => a+b, 0),
+      symbol: entries[Math.floor(entries.length/2)]?.symbol || 'unknown',
+      type: dataType
+    };
+  });
+
+  const allTemps = dayEntries.flatMap(d => [d.minT, d.maxT]).filter(t => isFinite(t));
+  const minAll = Math.min(...allTemps), maxAll = Math.max(...allTemps);
+
+  container.innerHTML = `
+    <div class="chart-section">
+      <div class="chart-title">Daily Temperature Range</div>
+      <div class="chart-wrapper">
+        ${renderRangeChart(dayEntries, minAll, maxAll)}
+      </div>
+    </div>
+    <div class="chart-section">
+      <div class="chart-title">Daily Breakdown</div>
+      ${dayEntries.map(d => `
+        <div class="data-row">
+          <div class="data-row-time">${formatDay(d.day+'T12:00:00')}</div>
+          <div class="data-row-icon">${symbolToEmoji(d.symbol)}</div>
+          <div class="data-row-values">
+            <div class="mini-stat"><div class="label">Range</div><div class="value">${Math.round(d.minT)}–${Math.round(d.maxT)}°C</div></div>
+            <div class="mini-stat"><div class="label">Wind</div><div class="value">${d.avgWind !== null ? d.avgWind.toFixed(1)+' m/s' : '—'}</div></div>
+            <div class="mini-stat"><div class="label">Rain</div><div class="value">${d.totalPrecip.toFixed(1)}mm</div></div>
+          </div>
+          <div class="data-row-dot"><div class="data-dot ${d.type}"></div></div>
+        </div>`).join('')}
+    </div>`;
+}
+
+function renderWeekly(loc, container) {
+  // Aggregate across all cached snapshots grouped by week
+  if (loc.cache.length < 2) {
+    container.innerHTML = `<div class="detail-empty">
+      <div class="detail-empty-icon">📊</div>
+      <div class="detail-empty-title">Not enough history</div>
+      <p style="font-size:12px;color:var(--muted);">Weekly trends build up over time<br>as you revisit this app.</p>
+    </div>`;
+    return;
+  }
+
+  // Group all timeseries data from all snapshots by week
+  const weeks = {};
+  loc.cache.forEach(snap => {
+    snap.timeseries.forEach(e => {
+      const d = new Date(e.time);
+      const weekStart = new Date(d);
+      weekStart.setDate(d.getDate() - d.getDay());
+      const wk = weekStart.toISOString().slice(0,10);
+      if (!weeks[wk]) weeks[wk] = [];
+      weeks[wk].push(e);
+    });
+  });
+
+  const weekKeys = Object.keys(weeks).sort().slice(-6);
+  if (!weekKeys.length) {
+    container.innerHTML = '<div class="detail-empty"><div class="detail-empty-icon">📭</div><div>No weekly data</div></div>';
+    return;
+  }
+
+  const weekEntries = weekKeys.map(wk => {
+    const entries = weeks[wk];
+    const temps = entries.map(e => e.temp).filter(t => t !== undefined);
+    const winds = entries.map(e => e.wind).filter(w => w !== undefined);
+    const precips = entries.map(e => e.precip).filter(p => p !== undefined);
+    const types = [...new Set(entries.map(e => e.type))];
+    return {
+      wk,
+      avgT: temps.length ? temps.reduce((a,b) => a+b, 0)/temps.length : null,
+      minT: temps.length ? Math.min(...temps) : null,
+      maxT: temps.length ? Math.max(...temps) : null,
+      avgWind: winds.length ? winds.reduce((a,b) => a+b, 0)/winds.length : null,
+      totalPrecip: precips.reduce((a,b) => a+b, 0),
+      type: types.length > 1 ? 'mixed' : (types[0] || 'forecast')
+    };
+  });
+
+  const allTemps = weekEntries.flatMap(d => [d.minT, d.maxT]).filter(t => t !== null && isFinite(t));
+  const minAll = Math.min(...allTemps), maxAll = Math.max(...allTemps);
+
+  container.innerHTML = `
+    <div class="chart-section">
+      <div class="chart-title">Weekly Avg Temperature</div>
+      <div class="chart-wrapper">
+        ${renderWeeklyChart(weekEntries, minAll, maxAll)}
+      </div>
+    </div>
+    <div class="chart-section">
+      <div class="chart-title">Weekly Summary</div>
+      ${weekEntries.map(w => `
+        <div class="data-row">
+          <div class="data-row-time">Wk of ${formatDay(w.wk+'T12:00:00').replace(/\w+, /, '')}</div>
+          <div class="data-row-icon">📅</div>
+          <div class="data-row-values">
+            <div class="mini-stat"><div class="label">Avg Temp</div><div class="value">${w.avgT !== null ? Math.round(w.avgT)+'°C' : '—'}</div></div>
+            <div class="mini-stat"><div class="label">Avg Wind</div><div class="value">${w.avgWind !== null ? w.avgWind.toFixed(1)+' m/s' : '—'}</div></div>
+            <div class="mini-stat"><div class="label">Total Rain</div><div class="value">${w.totalPrecip.toFixed(1)}mm</div></div>
+          </div>
+          <div class="data-row-dot"><div class="data-dot ${w.type}"></div></div>
+        </div>`).join('')}
+    </div>`;
+}
+
+// ════════════════════════════════════════════════
+//  CANVAS CHARTS (inline SVG for simplicity)
+// ════════════════════════════════════════════════
+function renderMiniChart(entries, field, min, max) {
+  const W = Math.max(entries.length * 32, 300);
+  const H = 100;
+  const pad = 10;
+  const vals = entries.map(e => e[field]);
+  const range = max - min || 1;
+
+  const pts = vals.map((v, i) => {
+    const x = pad + (i / (vals.length - 1)) * (W - pad*2);
+    const y = H - pad - ((v - min) / range) * (H - pad*2);
+    return [x, isNaN(y) ? H/2 : y];
+  });
+
+  const path = pts.map((p, i) => (i===0 ? `M${p[0]},${p[1]}` : `L${p[0]},${p[1]}`)).join(' ');
+  const areaPath = path + ` L${pts[pts.length-1][0]},${H} L${pts[0][0]},${H} Z`;
+
+  const dotColors = entries.map(e => e.type === 'measured' ? '#00e5c0' : '#4a9eff');
+
+  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="grad_${field}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#4a9eff" stop-opacity="0.3"/>
+        <stop offset="100%" stop-color="#4a9eff" stop-opacity="0.02"/>
+      </linearGradient>
+    </defs>
+    <path d="${areaPath}" fill="url(#grad_${field})"/>
+    <path d="${path}" fill="none" stroke="#4a9eff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    ${pts.map((p, i) => `<circle cx="${p[0]}" cy="${p[1]}" r="3" fill="${dotColors[i]}" opacity="0.8"/>`).join('')}
+    ${pts.map((p, i) => `<text x="${p[0]}" y="${H}" fill="#5a7090" font-size="9" text-anchor="middle" font-family="Space Mono,monospace">${formatTime(entries[i].time)}</text>`).join('')}
+  </svg>`;
+}
+
+function renderBarChart(entries) {
+  const W = Math.max(entries.length * 32, 300);
+  const H = 80;
+  const pad = 8;
+  const maxP = Math.max(...entries.map(e => e.precip || 0), 1);
+  const barW = (W - pad*2) / entries.length * 0.6;
+
+  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+    ${entries.map((e, i) => {
+      const x = pad + (i / entries.length) * (W - pad*2) + (W - pad*2)/entries.length * 0.2;
+      const barH = ((e.precip||0) / maxP) * (H - 20);
+      const y = H - 14 - barH;
+      const col = e.type === 'measured' ? '#00e5c0' : '#4a9eff';
+      return `<rect x="${x}" y="${y}" width="${barW}" height="${barH}" fill="${col}" opacity="0.7" rx="2"/>
+        <text x="${x + barW/2}" y="${H}" fill="#5a7090" font-size="9" text-anchor="middle" font-family="Space Mono,monospace">${formatTime(e.time)}</text>`;
+    }).join('')}
+  </svg>`;
+}
+
+function renderRangeChart(dayEntries, minAll, maxAll) {
+  const W = Math.max(dayEntries.length * 60, 300);
+  const H = 100;
+  const pad = 14;
+  const range = maxAll - minAll || 1;
+
+  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+    ${dayEntries.map((d, i) => {
+      const x = pad + (i + 0.5) * ((W - pad*2) / dayEntries.length);
+      const y1 = H - pad - ((d.maxT - minAll) / range) * (H - pad*2);
+      const y2 = H - pad - ((d.minT - minAll) / range) * (H - pad*2);
+      const col = d.type === 'mixed' ? '#a78bfa' : d.type === 'measured' ? '#00e5c0' : '#4a9eff';
+      return `
+        <line x1="${x}" y1="${y1}" x2="${x}" y2="${y2}" stroke="${col}" stroke-width="4" stroke-linecap="round" opacity="0.8"/>
+        <circle cx="${x}" cy="${y1}" r="4" fill="${col}"/>
+        <circle cx="${x}" cy="${y2}" r="4" fill="${col}" opacity="0.5"/>
+        <text x="${x}" y="${H}" fill="#5a7090" font-size="9" text-anchor="middle" font-family="Space Mono,monospace">${new Date(d.day+'T12:00:00').toLocaleDateString([],{weekday:'short'})}</text>
+      `;
+    }).join('')}
+  </svg>`;
+}
+
+function renderWeeklyChart(weekEntries, minAll, maxAll) {
+  const W = Math.max(weekEntries.length * 80, 300);
+  const H = 100;
+  const pad = 14;
+  const range = maxAll - minAll || 1;
+
+  const pts = weekEntries.map((w, i) => {
+    const x = pad + (i + 0.5) * ((W - pad*2) / weekEntries.length);
+    const y = w.avgT !== null ? H - pad - ((w.avgT - minAll) / range) * (H - pad*2) : H/2;
+    return [x, y, w.type];
+  });
+
+  const path = pts.map((p, i) => (i===0 ? `M${p[0]},${p[1]}` : `L${p[0]},${p[1]}`)).join(' ');
+
+  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+    <path d="${path}" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 2"/>
+    ${pts.map((p, i) => {
+      const col = p[2] === 'mixed' ? '#a78bfa' : p[2] === 'measured' ? '#00e5c0' : '#4a9eff';
+      return `<circle cx="${p[0]}" cy="${p[1]}" r="5" fill="${col}"/>
+        <text x="${p[0]}" y="${H}" fill="#5a7090" font-size="9" text-anchor="middle" font-family="Space Mono,monospace">${new Date(weekEntries[i].wk+'T12:00:00').toLocaleDateString([],{month:'short',day:'numeric'})}</text>`;
+    }).join('')}
+  </svg>`;
+}
+
+// ════════════════════════════════════════════════
+//  TOAST
+// ════════════════════════════════════════════════
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+}
+</script>
+
+</body>
+</html>
