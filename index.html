@@ -1,221 +1,1001 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>SkyCast PWA</title>
-    
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="SkyCast">
-    
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Weather Pins (Yr/MET)</title>
 
-    <style>
-        :root {
-            --bg: #0f172a;
-            --card: #1e293b;
-            --accent: #38bdf8;
-            --text: #f8fafc;
-        }
-        body { 
-            margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica; 
-            background: var(--bg); color: var(--text); overflow: hidden;
-        }
-        #map { height: 40vh; width: 100%; border-bottom: 2px solid var(--accent); }
-        #dashboard { height: 60vh; overflow-y: auto; padding: 15px; padding-bottom: 80px; }
-        
-        .loc-card {
-            background: var(--card); border-radius: 12px; padding: 15px; margin-bottom: 15px;
-            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3);
-        }
-        .header-flex { display: flex; justify-content: space-between; align-items: center; }
-        .data-source { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 5px; }
-        .source-live { background: #10b981; box-shadow: 0 0 8px #10b981; } /* Green = Current */
-        .source-forecast { background: #f59e0b; } /* Orange = Forecast */
-        
-        .tabs { display: flex; gap: 10px; margin-top: 10px; }
-        .tab-btn { 
-            background: transparent; border: 1px solid var(--accent); color: var(--accent);
-            padding: 5px 10px; border-radius: 5px; font-size: 12px;
-        }
-        .tab-btn.active { background: var(--accent); color: var(--bg); }
-        
-        canvas { max-height: 180px; margin-top: 10px; }
-        
-        #controls {
-            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
-            background: var(--accent); color: var(--bg); padding: 12px 24px;
-            border-radius: 30px; font-weight: bold; z-index: 1000; box-shadow: 0 4px 15px rgba(0,0,0,0.4);
-        }
-    </style>
+  <!-- iPhone Add-to-Home-Screen -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Weather Pins">
+  <meta name="theme-color" content="#0b0f14">
+
+  <!-- Leaflet (map) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"
+          integrity="sha384-1YqG4c4bpVZl7cHjzVfJt7HcKQm6mEoF1NYQw0JgWSw8m/7Jf5yGvQGJpQwG0l4u"
+          crossorigin="anonymous"></script>
+
+  <style>
+    :root{
+      --bg:#0b0f14; --panel:#0f1620; --panel2:#101b27; --text:#e7eef7; --muted:#93a4b7;
+      --line:#1c2a3a; --accent:#4aa3ff; --danger:#ff5a6a; --ok:#57d38c; --forecast:#4aa3ff;
+      --shadow: 0 8px 20px rgba(0,0,0,.35);
+      --radius: 14px;
+      --padTop: env(safe-area-inset-top);
+      --padBot: env(safe-area-inset-bottom);
+      --padLeft: env(safe-area-inset-left);
+      --padRight: env(safe-area-inset-right);
+      --font: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; background:linear-gradient(180deg,#081018,#0b0f14 30%);
+      color:var(--text); font-family:var(--font);
+      padding: calc(10px + var(--padTop)) calc(10px + var(--padRight)) calc(72px + var(--padBot)) calc(10px + var(--padLeft));
+    }
+    header{
+      display:flex; align-items:center; justify-content:space-between;
+      gap:10px; padding:10px 10px 8px;
+      background:rgba(15,22,32,.8); border:1px solid var(--line);
+      border-radius:var(--radius); box-shadow:var(--shadow);
+      position:sticky; top:calc(8px + var(--padTop)); z-index:50;
+      backdrop-filter: blur(10px);
+    }
+    header .title{
+      display:flex; flex-direction:column; line-height:1.1;
+    }
+    header h1{ font-size:16px; margin:0; letter-spacing:.2px }
+    header .meta{ font-size:12px; color:var(--muted); margin-top:4px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
+    .dot{
+      width:10px; height:10px; border-radius:999px; display:inline-block; vertical-align:middle;
+      box-shadow: 0 0 0 2px rgba(255,255,255,.05) inset;
+    }
+    .dot.ok{ background:var(--ok) }
+    .dot.forecast{ background:var(--forecast) }
+    .dot.unknown{ background:#6b7c91 }
+    .btn{
+      appearance:none; border:1px solid var(--line);
+      background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
+      color:var(--text); padding:10px 12px; border-radius:12px;
+      font-weight:600; font-size:13px; cursor:pointer;
+      box-shadow: 0 6px 14px rgba(0,0,0,.25);
+    }
+    .btn:active{ transform: translateY(1px) }
+    .btn.primary{ border-color:rgba(74,163,255,.45); }
+    .btn.danger{ border-color:rgba(255,90,106,.35); color:#ffd7dc; }
+    .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .tabs{
+      position:fixed; left:0; right:0; bottom:0;
+      padding:10px calc(10px + var(--padRight)) calc(10px + var(--padBot)) calc(10px + var(--padLeft));
+      background:rgba(10,14,20,.88); border-top:1px solid var(--line);
+      backdrop-filter: blur(12px);
+      display:flex; gap:10px; justify-content:space-between; z-index:60;
+    }
+    .tabbtn{
+      flex:1; text-align:center; padding:12px 10px; border-radius:14px;
+      border:1px solid var(--line); color:var(--muted);
+      background:rgba(255,255,255,.03); font-weight:700; font-size:13px;
+      cursor:pointer;
+    }
+    .tabbtn.active{ color:var(--text); border-color:rgba(74,163,255,.35); background:rgba(74,163,255,.10); }
+    main{ margin-top:12px; }
+    .panel{
+      background:rgba(15,22,32,.72);
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      padding:12px;
+    }
+    .panel + .panel{ margin-top:12px }
+    .muted{ color:var(--muted) }
+    #map{ height:360px; border-radius:14px; overflow:hidden; border:1px solid var(--line); }
+    .list{
+      display:flex; flex-direction:column; gap:10px; margin-top:10px;
+    }
+    .loc{
+      display:flex; gap:10px; align-items:flex-start; justify-content:space-between;
+      padding:10px; border-radius:14px; border:1px solid var(--line);
+      background:rgba(255,255,255,.03);
+    }
+    .loc .name{ font-weight:800; font-size:14px; }
+    .loc .sub{ font-size:12px; color:var(--muted); margin-top:4px; }
+    .loc .right{ display:flex; gap:8px; align-items:center; }
+    .pill{
+      font-size:12px; padding:6px 8px; border-radius:999px;
+      border:1px solid var(--line); color:var(--muted);
+      background:rgba(255,255,255,.02);
+    }
+    select, input{
+      width:100%; padding:12px 12px; border-radius:12px;
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.03);
+      color:var(--text);
+      outline:none;
+    }
+    .grid2{ display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+    .grid3{ display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; }
+    .card{
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:10px;
+      background:rgba(255,255,255,.03);
+    }
+    .big{
+      font-size:22px; font-weight:900; letter-spacing:.2px;
+    }
+    .tiny{ font-size:12px; color:var(--muted) }
+    .hidden{ display:none !important; }
+    canvas{ max-height:420px; }
+    .legend{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; font-size:12px; color:var(--muted); }
+    .notice{
+      font-size:12px; color:var(--muted); line-height:1.35;
+      border:1px dashed rgba(147,164,183,.35);
+      padding:10px; border-radius:14px;
+      background:rgba(255,255,255,.02);
+    }
+    a{ color:var(--accent); text-decoration:none; }
+  </style>
 </head>
+
 <body>
+<header>
+  <div class="title">
+    <h1>Weather Pins</h1>
+    <div class="meta">
+      <span class="pill">v1.0.0</span>
+      <span id="statusText" class="muted">Ready</span>
+      <span class="legend">
+        <span><span class="dot ok"></span> nowcast/current-ish</span>
+        <span><span class="dot forecast"></span> forecast</span>
+      </span>
+    </div>
+  </div>
+  <div class="row">
+    <button class="btn primary" id="refreshBtn">Refresh</button>
+  </div>
+</header>
 
-<div id="map"></div>
-<div id="dashboard">
-    <div id="locations-list"></div>
-</div>
+<main>
+  <!-- SETTINGS TAB -->
+  <section id="tabSettings" class="panel">
+    <div class="row" style="justify-content:space-between; align-items:flex-end;">
+      <div>
+        <div style="font-weight:900;">Locations</div>
+        <div class="muted" style="font-size:12px;margin-top:4px;">Tap the map to add a pin. Select a location to view charts.</div>
+      </div>
+      <button class="btn" id="centerBtn">Center</button>
+    </div>
 
-<div id="controls" onclick="addCurrentLocation()">+ Add Pin Here</div>
+    <div style="margin-top:10px;">
+      <div id="map"></div>
+    </div>
+
+    <div class="list" id="locList"></div>
+
+    <div class="notice" style="margin-top:12px;">
+      This app uses MET Norway’s public weather endpoints (the same data ecosystem Yr points developers to), and stores snapshots locally in your browser.
+      If you ever see 403/429 issues, it can be related to identification/rate-limiting expectations and browser header limitations for web clients.
+    </div>
+  </section>
+
+  <!-- PLOT TAB -->
+  <section id="tabPlot" class="panel hidden">
+    <div class="grid2">
+      <div>
+        <div class="tiny">Location</div>
+        <select id="locSelect"></select>
+      </div>
+      <div>
+        <div class="tiny">View</div>
+        <div class="grid3">
+          <button class="btn" id="viewHourly">Hourly</button>
+          <button class="btn" id="viewDaily">Daily</button>
+          <button class="btn" id="viewWeekly">Weekly</button>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:10px;" class="row">
+      <span class="pill" id="lastFetchPill">Last fetch: —</span>
+      <span class="pill" id="sourcePill"><span class="dot unknown"></span>&nbsp;source: —</span>
+      <span class="pill" id="historyPill">Cached points: —</span>
+    </div>
+
+    <div style="margin-top:12px;">
+      <canvas id="chart"></canvas>
+    </div>
+  </section>
+
+  <!-- STATS TAB -->
+  <section id="tabStats" class="panel hidden">
+    <div class="row" style="justify-content:space-between;">
+      <div>
+        <div style="font-weight:900;">Latest snapshot</div>
+        <div class="muted" style="font-size:12px;margin-top:4px;">Per selected location, from cache + newest fetch.</div>
+      </div>
+      <button class="btn danger" id="wipeBtn">Wipe cache</button>
+    </div>
+
+    <div style="margin-top:12px;">
+      <div class="tiny">Location</div>
+      <select id="statsLocSelect"></select>
+    </div>
+
+    <div style="margin-top:12px;" class="grid2">
+      <div class="card">
+        <div class="tiny">Temperature</div>
+        <div class="big" id="statTemp">—</div>
+        <div class="tiny" id="statTempMeta">—</div>
+      </div>
+      <div class="card">
+        <div class="tiny">Precipitation</div>
+        <div class="big" id="statPrecip">—</div>
+        <div class="tiny" id="statPrecipMeta">—</div>
+      </div>
+      <div class="card">
+        <div class="tiny">Wind</div>
+        <div class="big" id="statWind">—</div>
+        <div class="tiny" id="statWindMeta">—</div>
+      </div>
+      <div class="card">
+        <div class="tiny">Source</div>
+        <div class="big" id="statSource"><span class="dot unknown"></span> —</div>
+        <div class="tiny" id="statSourceMeta">—</div>
+      </div>
+    </div>
+
+    <div class="notice" style="margin-top:12px;">
+      Data sources:
+      <ul style="margin:8px 0 0 18px; padding:0;">
+        <li>Locationforecast 2.0 (global forecast, up to ~9 days)</li>
+        <li>Nowcast 2.0 (Nordic area “current-ish” + next ~2 hours, updated frequently)</li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<!-- Bottom Tabs -->
+<nav class="tabs">
+  <button class="tabbtn active" data-tab="Settings">Settings</button>
+  <button class="tabbtn" data-tab="Plot">Plot</button>
+  <button class="tabbtn" data-tab="Stats">Stats</button>
+</nav>
 
 <script>
-    // --- CONFIG & STATE ---
-    let map, markers = {};
-    let locations = JSON.parse(localStorage.getItem('skycast_locations')) || [];
-    let weatherCache = JSON.parse(localStorage.getItem('skycast_cache')) || {};
+/**
+ * Weather Pins v1.0.0
+ *
+ * Static, single-file GitHub Pages app.
+ * - Locations stored in localStorage
+ * - Weather snapshots stored in IndexedDB
+ * - Fetches MET Weather API (Locationforecast + Nowcast)
+ *
+ * Notes:
+ * - MET wants identifying User-Agent "if possible"; browsers don't reliably allow setting it.
+ * - Keep traffic low: this app throttles to at most 1 refresh / 10 minutes per location (unless forced).
+ */
 
-    // --- INITIALIZATION ---
-    function init() {
-        map = L.map('map', { zoomControl: false }).setView([59.91, 10.75], 5); // Default Norway
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+// ------------------------------
+// Config
+// ------------------------------
+const APP_VERSION = "1.0.0";
+const MIN_FETCH_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes per location
+const DB_NAME = "weatherpins_db";
+const DB_VERSION = 1;
+const STORE_SNAPSHOTS = "snapshots";
+const STORE_META = "meta";
 
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+
+function setStatus(msg){ $("#statusText").textContent = msg; }
+
+// ------------------------------
+// IndexedDB helpers
+// ------------------------------
+function openDB(){
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (e) => {
+      const db = req.result;
+      if(!db.objectStoreNames.contains(STORE_SNAPSHOTS)){
+        const store = db.createObjectStore(STORE_SNAPSHOTS, { keyPath: "id" });
+        store.createIndex("by_loc_ts", ["locId","cachedAt"], { unique:false });
+      }
+      if(!db.objectStoreNames.contains(STORE_META)){
+        db.createObjectStore(STORE_META, { keyPath:"key" });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbPut(storeName, value){
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, "readwrite");
+    tx.objectStore(storeName).put(value);
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function idbGet(storeName, key){
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, "readonly");
+    const req = tx.objectStore(storeName).get(key);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbDelete(storeName, key){
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, "readwrite");
+    tx.objectStore(storeName).delete(key);
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function idbClear(storeName){
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, "readwrite");
+    tx.objectStore(storeName).clear();
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function idbGetSnapshotsForLoc(locId, limit=2000){
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_SNAPSHOTS, "readonly");
+    const idx = tx.objectStore(STORE_SNAPSHOTS).index("by_loc_ts");
+    const range = IDBKeyRange.bound([locId, 0], [locId, Number.MAX_SAFE_INTEGER]);
+    const out = [];
+    idx.openCursor(range, "next").onsuccess = (e) => {
+      const cursor = e.target.result;
+      if(cursor){
+        out.push(cursor.value);
+        if(out.length >= limit){ resolve(out); return; }
+        cursor.continue();
+      } else resolve(out);
+    };
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function idbSetMeta(key, value){
+  return idbPut(STORE_META, { key, value });
+}
+async function idbGetMeta(key){
+  const row = await idbGet(STORE_META, key);
+  return row ? row.value : null;
+}
+
+// ------------------------------
+// Locations storage
+// ------------------------------
+function loadLocations(){
+  try{
+    return JSON.parse(localStorage.getItem("weatherpins_locations") || "[]");
+  }catch{ return []; }
+}
+function saveLocations(locs){
+  localStorage.setItem("weatherpins_locations", JSON.stringify(locs));
+}
+function uuid(){
+  return Math.random().toString(16).slice(2) + Date.now().toString(16);
+}
+
+// ------------------------------
+// MET API fetch + parsing
+// ------------------------------
+function metUrlLocationforecast(lat, lon){
+  const base = "https://api.met.no/weatherapi/locationforecast/2.0/compact";
+  return `${base}?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`;
+}
+function metUrlNowcast(lat, lon){
+  const base = "https://api.met.no/weatherapi/nowcast/2.0/complete";
+  return `${base}?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`;
+}
+
+async function fetchJson(url){
+  const res = await fetch(url, {
+    headers: { "Accept":"application/json" },
+    cache: "no-store",
+  });
+  if(!res.ok){
+    const text = await res.text().catch(()=> "");
+    throw new Error(`HTTP ${res.status} from ${new URL(url).pathname} ${text ? ("— " + text.slice(0,120)) : ""}`);
+  }
+  return res.json();
+}
+
+function extractForecastTimeseries(json){
+  // Locationforecast: properties.timeseries[] each has time + data.instant.details + data.next_1_hours/next_6_hours/etc
+  const ts = (json?.properties?.timeseries || []).map(t => {
+    const time = Date.parse(t.time);
+    const inst = t.data?.instant?.details || {};
+    const next1 = t.data?.next_1_hours?.details || {};
+    const next6 = t.data?.next_6_hours?.details || {};
+    return {
+      time,
+      air_temperature: inst.air_temperature ?? null,
+      wind_speed: inst.wind_speed ?? null,
+      wind_from_direction: inst.wind_from_direction ?? null,
+      relative_humidity: inst.relative_humidity ?? null,
+      precip_1h: next1.precipitation_amount ?? null,
+      precip_6h: next6.precipitation_amount ?? null,
+      cloud_area_fraction: inst.cloud_area_fraction ?? null
+    };
+  });
+  return ts.filter(x => Number.isFinite(x.time));
+}
+
+function extractNowcast(json){
+  // Nowcast: GeoJSON with features[0].properties.timeseries
+  const ts = (json?.properties?.timeseries || []).map(t => {
+    const time = Date.parse(t.time);
+    const inst = t.data?.instant?.details || {};
+    const next1 = t.data?.next_1_hours?.details || {};
+    return {
+      time,
+      air_temperature: inst.air_temperature ?? null,
+      wind_speed: inst.wind_speed ?? null,
+      wind_from_direction: inst.wind_from_direction ?? null,
+      relative_humidity: inst.relative_humidity ?? null,
+      precip_1h: next1.precipitation_amount ?? null,
+      cloud_area_fraction: inst.cloud_area_fraction ?? null
+    };
+  });
+  return ts.filter(x => Number.isFinite(x.time));
+}
+
+function pickBestCurrent(nowcastTs, forecastTs){
+  // Prefer nowcast first point if available; else forecast first point
+  if(nowcastTs && nowcastTs.length){
+    return { source:"nowcast", point: nowcastTs[0] };
+  }
+  if(forecastTs && forecastTs.length){
+    return { source:"forecast", point: forecastTs[0] };
+  }
+  return { source:"unknown", point:null };
+}
+
+function fmtTime(ms){
+  if(!ms) return "—";
+  const d = new Date(ms);
+  return d.toLocaleString([], { year:"numeric", month:"short", day:"2-digit", hour:"2-digit", minute:"2-digit" });
+}
+
+function sameDayKey(ms){
+  const d = new Date(ms);
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,"0");
+  const da = String(d.getDate()).padStart(2,"0");
+  return `${y}-${m}-${da}`;
+}
+
+// Aggregate daily from hourly-ish points
+function aggregateDaily(points){
+  const byDay = new Map();
+  for(const p of points){
+    const k = sameDayKey(p.time);
+    if(!byDay.has(k)){
+      byDay.set(k, { day:k, tmin: Infinity, tmax: -Infinity, precip:0, wind:0, n:0, time: p.time });
+    }
+    const a = byDay.get(k);
+    if(p.air_temperature != null){
+      a.tmin = Math.min(a.tmin, p.air_temperature);
+      a.tmax = Math.max(a.tmax, p.air_temperature);
+    }
+    if(p.precip_1h != null) a.precip += p.precip_1h;
+    if(p.wind_speed != null){ a.wind += p.wind_speed; a.n++; }
+  }
+  const out = Array.from(byDay.values()).sort((a,b)=>a.day.localeCompare(b.day));
+  for(const d of out){
+    if(!Number.isFinite(d.tmin)) d.tmin = null;
+    if(!Number.isFinite(d.tmax)) d.tmax = null;
+    d.wind_avg = d.n ? (d.wind/d.n) : null;
+  }
+  return out;
+}
+
+function sliceWeeklyFromDaily(daily){
+  return daily.slice(0, 7);
+}
+
+// ------------------------------
+// App state
+// ------------------------------
+let locations = loadLocations();
+let map, markers = new Map();
+let selectedLocId = locations[0]?.id || null;
+let chart, viewMode = "hourly"; // hourly | daily | weekly
+
+// ------------------------------
+// UI: tabs
+// ------------------------------
+function showTab(name){
+  $("#tabSettings").classList.toggle("hidden", name !== "Settings");
+  $("#tabPlot").classList.toggle("hidden", name !== "Plot");
+  $("#tabStats").classList.toggle("hidden", name !== "Stats");
+  $$(".tabbtn").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
+}
+
+// ------------------------------
+// Map + markers
+// ------------------------------
+function initMap(){
+  map = L.map("map", { zoomControl:false, preferCanvas:true });
+  // Dark tiles (Carto)
+  const tiles = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+    attribution: '&copy; OpenStreetMap &copy; CARTO',
+    maxZoom: 19
+  }).addTo(map);
+
+  // Default view: Oslo-ish or first location
+  const start = locations[0] ? [locations[0].lat, locations[0].lon] : [59.91, 10.75];
+  map.setView(start, locations[0] ? 11 : 5);
+
+  map.on("click", async (e) => {
+    const lat = +e.latlng.lat.toFixed(5);
+    const lon = +e.latlng.lng.toFixed(5);
+    const name = prompt("Name this location:", "New pin");
+    if(!name) return;
+    const loc = { id: uuid(), name: name.trim(), lat, lon, createdAt: Date.now() };
+    locations.push(loc);
+    saveLocations(locations);
+    selectedLocId = loc.id;
+    renderLocations();
+    renderSelects();
+    addOrUpdateMarker(loc);
+    map.setView([lat, lon], Math.max(map.getZoom(), 11));
+    // Fetch immediately for new pin
+    await refreshAll({ force:true, onlyLocId: loc.id });
+    // Switch to plot quickly
+    showTab("Plot");
+    updatePlot();
+    updateStats();
+  });
+
+  $("#centerBtn").addEventListener("click", () => {
+    const loc = locations.find(l => l.id === selectedLocId) || locations[0];
+    if(loc) map.setView([loc.lat, loc.lon], 11);
+  });
+}
+
+function addOrUpdateMarker(loc){
+  if(markers.has(loc.id)){
+    markers.get(loc.id).setLatLng([loc.lat, loc.lon]);
+    return;
+  }
+  const m = L.marker([loc.lat, loc.lon]).addTo(map);
+  m.on("click", () => {
+    selectedLocId = loc.id;
+    renderLocations();
+    renderSelects();
+    updatePlot();
+    updateStats();
+    showTab("Plot");
+  });
+  m.bindTooltip(loc.name, { direction:"top", opacity:0.9 });
+  markers.set(loc.id, m);
+}
+
+function removeMarker(locId){
+  const m = markers.get(locId);
+  if(m){ map.removeLayer(m); markers.delete(locId); }
+}
+
+// ------------------------------
+// Rendering locations list + selects
+// ------------------------------
+async function getLocLastFetch(locId){
+  return await idbGetMeta(`lastFetch:${locId}`); // ms
+}
+async function getLocLastSource(locId){
+  return await idbGetMeta(`lastSource:${locId}`); // "nowcast"/"forecast"
+}
+
+function renderLocations(){
+  const list = $("#locList");
+  list.innerHTML = "";
+  if(!locations.length){
+    list.innerHTML = `<div class="notice">No locations yet. Tap the map to add your first pin.</div>`;
+    return;
+  }
+  for(const loc of locations){
+    const el = document.createElement("div");
+    el.className = "loc";
+    el.style.borderColor = (loc.id === selectedLocId) ? "rgba(74,163,255,.45)" : "var(--line)";
+    el.innerHTML = `
+      <div style="min-width:0">
+        <div class="name">${escapeHtml(loc.name)}</div>
+        <div class="sub">${loc.lat.toFixed(5)}, ${loc.lon.toFixed(5)}</div>
+        <div class="sub" id="meta-${loc.id}">Last fetch: …</div>
+      </div>
+      <div class="right">
+        <button class="btn" data-act="select" data-id="${loc.id}">View</button>
+        <button class="btn danger" data-act="del" data-id="${loc.id}">Del</button>
+      </div>
+    `;
+    list.appendChild(el);
+
+    // async meta
+    (async () => {
+      const last = await getLocLastFetch(loc.id);
+      const src = await getLocLastSource(loc.id);
+      const dotClass = src === "nowcast" ? "ok" : (src === "forecast" ? "forecast" : "unknown");
+      const meta = document.getElementById(`meta-${loc.id}`);
+      if(meta){
+        meta.innerHTML = `Last fetch: ${last ? fmtTime(last) : "—"} &nbsp; <span class="dot ${dotClass}"></span>`;
+      }
+    })();
+  }
+
+  list.querySelectorAll("button[data-act]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const act = btn.dataset.act, id = btn.dataset.id;
+      if(act === "select"){
+        selectedLocId = id;
         renderLocations();
-        
-        // Auto-refresh on open
-        if (locations.length > 0) refreshAllWeather();
-    }
-
-    // --- CORE LOGIC ---
-    async function fetchWeather(lat, lon) {
-        const userAgent = "SkyCastPWA/1.0 (https://github.com/yourusername/repo)";
-        const url = `https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}`;
-        
-        try {
-            const resp = await fetch(url, { headers: { 'User-Agent': userAgent } });
-            const data = await resp.json();
-            
-            // Determine if data is "Current" (within 1 hour of now) or "Forecast"
-            const latestTime = new Date(data.properties.timeseries[0].time);
-            const isLive = Math.abs(new Date() - latestTime) < 3600000;
-
-            return {
-                data: data,
-                timestamp: Date.now(),
-                isLive: isLive
-            };
-        } catch (e) {
-            console.error("Fetch failed", e);
-            return null;
-        }
-    }
-
-    async function addCurrentLocation() {
-        const center = map.getCenter();
-        const name = prompt("Name this location:", `Spot ${locations.length + 1}`);
-        if (!name) return;
-
-        const newLoc = { id: Date.now(), name, lat: center.lat, lon: center.lng };
-        locations.push(newLoc);
-        save();
-        await refreshWeatherForLoc(newLoc);
+        renderSelects();
+        updatePlot();
+        updateStats();
+        showTab("Plot");
+        const loc = locations.find(l=>l.id===id);
+        if(loc) map.setView([loc.lat, loc.lon], Math.max(map.getZoom(), 11));
+      } else if(act === "del"){
+        const loc = locations.find(l=>l.id===id);
+        if(!loc) return;
+        if(!confirm(`Delete "${loc.name}"? This does not erase cached snapshots unless you wipe cache.`)) return;
+        locations = locations.filter(l => l.id !== id);
+        saveLocations(locations);
+        removeMarker(id);
+        if(selectedLocId === id) selectedLocId = locations[0]?.id || null;
         renderLocations();
+        renderSelects();
+        updatePlot();
+        updateStats();
+      }
+    });
+  });
+}
+
+function renderSelects(){
+  const locSelect = $("#locSelect");
+  const statsSelect = $("#statsLocSelect");
+  const opts = locations.map(l => `<option value="${l.id}">${escapeHtml(l.name)}</option>`).join("");
+  locSelect.innerHTML = opts || `<option value="">No locations</option>`;
+  statsSelect.innerHTML = opts || `<option value="">No locations</option>`;
+  if(selectedLocId){
+    locSelect.value = selectedLocId;
+    statsSelect.value = selectedLocId;
+  } else if(locations[0]){
+    selectedLocId = locations[0].id;
+    locSelect.value = selectedLocId;
+    statsSelect.value = selectedLocId;
+  }
+
+  locSelect.onchange = () => {
+    selectedLocId = locSelect.value;
+    renderLocations();
+    updatePlot();
+    updateStats();
+  };
+  statsSelect.onchange = () => {
+    selectedLocId = statsSelect.value;
+    renderLocations();
+    updatePlot();
+    updateStats();
+  };
+}
+
+function escapeHtml(s){
+  return (s||"").replace(/[&<>"']/g, c => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+  }[c]));
+}
+
+// ------------------------------
+// Fetch + cache snapshots
+// ------------------------------
+async function refreshAll({ force=false, onlyLocId=null } = {}){
+  if(!locations.length){ setStatus("Add a pin to begin"); return; }
+
+  setStatus("Fetching…");
+  $("#refreshBtn").disabled = true;
+
+  let okCount = 0, failCount = 0;
+
+  // sequential to be gentle
+  for(const loc of locations){
+    if(onlyLocId && loc.id !== onlyLocId) continue;
+
+    try{
+      const last = await getLocLastFetch(loc.id);
+      if(!force && last && (Date.now() - last) < MIN_FETCH_INTERVAL_MS){
+        continue;
+      }
+      await fetchAndCacheLocation(loc);
+      okCount++;
+    }catch(err){
+      console.warn(err);
+      failCount++;
     }
+  }
 
-    async function refreshWeatherForLoc(loc) {
-        const weather = await fetchWeather(loc.lat, loc.lon);
-        if (weather) {
-            weatherCache[loc.id] = weather;
-            save();
-            renderLocations();
-        }
+  $("#refreshBtn").disabled = false;
+  renderLocations();
+  await updatePlot();
+  await updateStats();
+
+  if(failCount && okCount) setStatus(`Updated ${okCount}, failed ${failCount}`);
+  else if(failCount) setStatus(`Failed ${failCount}`);
+  else setStatus(`Updated ${okCount || 0}`);
+}
+
+async function fetchAndCacheLocation(loc){
+  const [fc, nc] = await Promise.allSettled([
+    fetchJson(metUrlLocationforecast(loc.lat, loc.lon)),
+    fetchJson(metUrlNowcast(loc.lat, loc.lon))
+  ]);
+
+  const forecastJson = (fc.status === "fulfilled") ? fc.value : null;
+  const nowcastJson  = (nc.status === "fulfilled") ? nc.value : null;
+
+  const forecastTs = forecastJson ? extractForecastTimeseries(forecastJson) : [];
+  const nowcastTs  = nowcastJson  ? extractNowcast(nowcastJson) : [];
+
+  const best = pickBestCurrent(nowcastTs, forecastTs);
+
+  const snapshot = {
+    id: `${loc.id}:${Date.now()}`,
+    locId: loc.id,
+    cachedAt: Date.now(),
+    lat: loc.lat,
+    lon: loc.lon,
+    name: loc.name,
+    source: best.source, // nowcast | forecast | unknown
+    current: best.point, // point object or null
+    forecastTs,          // array
+    nowcastTs,           // array
+  };
+
+  await idbPut(STORE_SNAPSHOTS, snapshot);
+  await idbSetMeta(`lastFetch:${loc.id}`, snapshot.cachedAt);
+  await idbSetMeta(`lastSource:${loc.id}`, snapshot.source);
+}
+
+// ------------------------------
+// Plot + Stats
+// ------------------------------
+function ensureChart(){
+  if(chart) return chart;
+  const ctx = $("#chart");
+  chart = new Chart(ctx, {
+    type: "line",
+    data: { labels: [], datasets: [] },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: "#e7eef7" } },
+        tooltip: { mode:"index", intersect:false }
+      },
+      scales: {
+        x: { ticks: { color: "#93a4b7" }, grid:{ color:"rgba(28,42,58,.35)" } },
+        y: { ticks: { color: "#93a4b7" }, grid:{ color:"rgba(28,42,58,.35)" } }
+      }
     }
+  });
+  return chart;
+}
 
-    function refreshAllWeather() {
-        locations.forEach(loc => refreshWeatherForLoc(loc));
-    }
+async function updatePlot(){
+  const loc = locations.find(l => l.id === selectedLocId);
+  if(!loc){
+    $("#lastFetchPill").textContent = "Last fetch: —";
+    $("#sourcePill").innerHTML = `<span class="dot unknown"></span>&nbsp;source: —`;
+    $("#historyPill").textContent = "Cached points: —";
+    if(chart){ chart.data.labels=[]; chart.data.datasets=[]; chart.update(); }
+    return;
+  }
 
-    function save() {
-        localStorage.setItem('skycast_locations', JSON.stringify(locations));
-        localStorage.setItem('skycast_cache', JSON.stringify(weatherCache));
-    }
+  const snaps = await idbGetSnapshotsForLoc(loc.id, 5000);
+  $("#historyPill").textContent = `Cached points: ${snaps.length}`;
 
-    // --- UI RENDERING ---
-    function renderLocations() {
-        const list = document.getElementById('locations-list');
-        list.innerHTML = '';
+  const lastFetch = await getLocLastFetch(loc.id);
+  const src = await getLocLastSource(loc.id);
+  $("#lastFetchPill").textContent = `Last fetch: ${lastFetch ? fmtTime(lastFetch) : "—"}`;
+  const dotClass = src === "nowcast" ? "ok" : (src === "forecast" ? "forecast" : "unknown");
+  $("#sourcePill").innerHTML = `<span class="dot ${dotClass}"></span>&nbsp;source: ${src || "—"}`;
 
-        locations.forEach(loc => {
-            const cache = weatherCache[loc.id];
-            const div = document.createElement('div');
-            div.className = 'loc-card';
-            
-            let weatherHTML = `<p>Loading weather...</p>`;
-            if (cache) {
-                const cur = cache.data.properties.timeseries[0].data.instant.details;
-                weatherHTML = `
-                    <div class="header-flex">
-                        <strong>${loc.name}</strong>
-                        <span>
-                            <span class="data-source ${cache.isLive ? 'source-live' : 'source-forecast'}"></span>
-                            ${cur.air_temperature}°C
-                        </span>
-                    </div>
-                    <div class="tabs">
-                        <button class="tab-btn active" onclick="drawChart(${loc.id}, 'hourly')">Hourly</button>
-                        <button class="tab-btn" onclick="drawChart(${loc.id}, 'daily')">Daily</button>
-                    </div>
-                    <canvas id="chart-${loc.id}"></canvas>
-                `;
-            }
+  // Use latest snapshot for forecast timeseries plotting
+  const latest = snaps[snaps.length - 1];
+  if(!latest){
+    setStatus("No cached weather yet—tap Refresh");
+    return;
+  }
 
-            div.innerHTML = weatherHTML;
-            list.appendChild(div);
-            if (cache) drawChart(loc.id, 'hourly');
-            
-            // Add/Update Map Marker
-            if (!markers[loc.id]) {
-                markers[loc.id] = L.marker([loc.lat, loc.lon]).addTo(map).bindPopup(loc.name);
-            }
-        });
-    }
+  const fcPoints = latest.forecastTs || [];
+  const nowPoints = latest.nowcastTs || [];
 
-    function drawChart(locId, type) {
-        const ctx = document.getElementById(`chart-${locId}`).getContext('2d');
-        const cache = weatherCache[locId];
-        if (!cache) return;
+  let labels = [];
+  let temp = [];
+  let precip = [];
 
-        const series = cache.data.properties.timeseries;
-        let labels = [], temps = [];
+  if(viewMode === "hourly"){
+    // next 48 hours from forecast; also overlay nowcast if available
+    const slice = fcPoints.slice(0, 48);
+    labels = slice.map(p => new Date(p.time).toLocaleString([], { weekday:"short", hour:"2-digit" }));
+    temp = slice.map(p => p.air_temperature);
+    precip = slice.map(p => p.precip_1h);
+    renderChart(labels, [
+      { label:"Temp (°C)", data: temp },
+      { label:"Precip (mm/1h)", data: precip }
+    ]);
+  } else if(viewMode === "daily"){
+    const daily = aggregateDaily(fcPoints);
+    labels = daily.map(d => d.day.slice(5)); // MM-DD
+    const tmin = daily.map(d => d.tmin);
+    const tmax = daily.map(d => d.tmax);
+    const pr = daily.map(d => +d.precip.toFixed(1));
+    renderChart(labels, [
+      { label:"Min Temp (°C)", data: tmin },
+      { label:"Max Temp (°C)", data: tmax },
+      { label:"Precip (mm/day)", data: pr }
+    ]);
+  } else if(viewMode === "weekly"){
+    const daily = sliceWeeklyFromDaily(aggregateDaily(fcPoints));
+    labels = daily.map(d => {
+      // show weekday
+      const dt = new Date(d.day + "T12:00:00");
+      return dt.toLocaleDateString([], { weekday:"short" });
+    });
+    const tmin = daily.map(d => d.tmin);
+    const tmax = daily.map(d => d.tmax);
+    const pr = daily.map(d => +d.precip.toFixed(1));
+    renderChart(labels, [
+      { label:"Min Temp (°C)", data: tmin },
+      { label:"Max Temp (°C)", data: tmax },
+      { label:"Precip (mm/day)", data: pr }
+    ]);
+  }
 
-        if (type === 'hourly') {
-            series.slice(0, 24).forEach(s => {
-                labels.push(new Date(s.time).getHours() + ":00");
-                temps.push(s.data.instant.details.air_temperature);
-            });
-        } else {
-            // Simple daily filter: pick 12:00 for each day
-            series.filter(s => s.time.includes("T12:00:00Z")).forEach(s => {
-                labels.push(new Date(s.time).toLocaleDateString(undefined, {weekday: 'short'}));
-                temps.push(s.data.instant.details.air_temperature);
-            });
-        }
+  setStatus("Ready");
+}
 
-        // Destroy old chart if exists to prevent hover glitches
-        if (window[`chartObj${locId}`]) window[`chartObj${locId}`].destroy();
+function renderChart(labels, datasets){
+  const c = ensureChart();
+  c.data.labels = labels;
+  c.data.datasets = datasets.map((ds, i) => ({
+    label: ds.label,
+    data: ds.data,
+    tension: 0.25,
+    pointRadius: 2,
+    pointHoverRadius: 5
+  }));
+  c.update();
+}
 
-        window[`chartObj${locId}`] = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: 'Temp (°C)',
-                    data: temps,
-                    borderColor: '#38bdf8',
-                    tension: 0.3,
-                    fill: false
-                }]
-            },
-            options: {
-                plugins: { legend: { display: false } },
-                scales: { y: { grid: { color: '#334155' } }, x: { grid: { display: false } } }
-            }
-        });
-    }
+async function updateStats(){
+  const loc = locations.find(l => l.id === selectedLocId);
+  if(!loc){
+    $("#statTemp").textContent = "—";
+    $("#statPrecip").textContent = "—";
+    $("#statWind").textContent = "—";
+    $("#statSource").innerHTML = `<span class="dot unknown"></span> —`;
+    $("#statSourceMeta").textContent = "—";
+    return;
+  }
 
-    init();
+  const snaps = await idbGetSnapshotsForLoc(loc.id, 2000);
+  const latest = snaps[snaps.length - 1] || null;
+
+  if(!latest || !latest.current){
+    $("#statTemp").textContent = "—";
+    $("#statPrecip").textContent = "—";
+    $("#statWind").textContent = "—";
+    $("#statSource").innerHTML = `<span class="dot unknown"></span> —`;
+    $("#statSourceMeta").textContent = "No snapshot yet. Tap Refresh.";
+    return;
+  }
+
+  const p = latest.current;
+  const temp = (p.air_temperature != null) ? `${p.air_temperature.toFixed(1)}°C` : "—";
+  const precip = (p.precip_1h != null) ? `${p.precip_1h.toFixed(1)} mm` : "—";
+  const wind = (p.wind_speed != null) ? `${p.wind_speed.toFixed(1)} m/s` : "—";
+
+  $("#statTemp").textContent = temp;
+  $("#statTempMeta").textContent = `At ${fmtTime(p.time)} (${fmtTime(latest.cachedAt)} cached)`;
+
+  $("#statPrecip").textContent = precip;
+  $("#statPrecipMeta").textContent = "Next 1h (if available)";
+
+  $("#statWind").textContent = wind;
+  $("#statWindMeta").textContent = "Instant wind speed";
+
+  const dotClass = latest.source === "nowcast" ? "ok" : (latest.source === "forecast" ? "forecast" : "unknown");
+  $("#statSource").innerHTML = `<span class="dot ${dotClass}"></span> ${latest.source}`;
+  $("#statSourceMeta").textContent = `Cached: ${fmtTime(latest.cachedAt)}`;
+}
+
+// ------------------------------
+// Wire up UI
+// ------------------------------
+function initUI(){
+  // tabs
+  $$(".tabbtn").forEach(btn => {
+    btn.addEventListener("click", () => showTab(btn.dataset.tab));
+  });
+
+  // view buttons
+  $("#viewHourly").addEventListener("click", () => { viewMode="hourly"; updatePlot(); });
+  $("#viewDaily").addEventListener("click",   () => { viewMode="daily"; updatePlot(); });
+  $("#viewWeekly").addEventListener("click",  () => { viewMode="weekly"; updatePlot(); });
+
+  // refresh
+  $("#refreshBtn").addEventListener("click", async () => {
+    await refreshAll({ force:true });
+  });
+
+  // wipe cache
+  $("#wipeBtn").addEventListener("click", async () => {
+    if(!confirm("Wipe ALL cached snapshots and meta? (Pins remain)")) return;
+    await idbClear(STORE_SNAPSHOTS);
+    await idbClear(STORE_META);
+    renderLocations();
+    updatePlot();
+    updateStats();
+    setStatus("Cache wiped");
+  });
+}
+
+// ------------------------------
+// Startup
+// ------------------------------
+(async function main(){
+  // Version badge
+  document.querySelector("header .pill").textContent = `v${APP_VERSION}`;
+
+  initUI();
+  initMap();
+
+  // markers
+  locations.forEach(addOrUpdateMarker);
+
+  // selects + list
+  renderLocations();
+  renderSelects();
+
+  // On open: scrape (fetch) weather stats for existing pins (throttled)
+  await refreshAll({ force:false });
+
+  // Default to Plot if locations exist
+  if(locations.length){
+    showTab("Plot");
+    await updatePlot();
+    await updateStats();
+  } else {
+    showTab("Settings");
+    setStatus("Tap the map to add a pin");
+  }
+})();
 </script>
 </body>
 </html>
